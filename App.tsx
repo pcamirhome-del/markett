@@ -38,13 +38,13 @@ import {
 } from './types';
 import { INITIAL_SETTINGS, INITIAL_ADMIN } from './constants';
 
-// --- Firebase Configuration ---
+// --- Firebase Configuration Updated ---
 const firebaseConfig = {
-  apiKey: "AIzaSyAYdWvZbTTkGlfI6vv02EFUMbw5eeF4UpU",
-  authDomain: "sample-firebase-adddi-app.firebaseapp.com",
-  databaseURL: "https://sample-firebase-adddi-app-default-rtdb.firebaseio.com",
-  projectId: "sample-firebase-adddi-app",
-  storageBucket: "sample-firebase-adddi-app.firebasestorage.app",
+  apiKey: "AIzaSyAYdWvZbTTkGlfI6vv02EFUMbw5eeF4UpU", // Keeping original API key format as the new string is a Project ID
+  authDomain: "zscsrnpjdlcnkqhfpcci.firebaseapp.com",
+  databaseURL: "https://zscsrnpjdlcnkqhfpcci-default-rtdb.firebaseio.com",
+  projectId: "zscsrnpjdlcnkqhfpcci",
+  storageBucket: "zscsrnpjdlcnkqhfpcci.firebasestorage.app",
   messagingSenderId: "1013529485030",
   appId: "1:1013529485030:web:3dd9b79cd7d7ba41b42527"
 };
@@ -52,7 +52,7 @@ const firebaseConfig = {
 // Initialize Firebase
 try {
   initializeApp(firebaseConfig);
-  console.log("Firebase initialized successfully");
+  console.log("Firebase initialized successfully with project: zscsrnpjdlcnkqhfpcci");
 } catch (error) {
   console.error("Firebase initialization failed", error);
 }
@@ -301,7 +301,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => void }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-indigo-700 to-purple-800 p-4">
-      <div className="w-full max-w-md glass p-8 rounded-[2rem] shadow-2xl border border-white/30 text-white animate-in fade-in zoom-in duration-500">
+      <div className="w-full max-w-md glass p-8 rounded-[2.5rem] shadow-2xl border border-white/30 text-white animate-in fade-in zoom-in duration-500">
         <div className="flex flex-col items-center mb-8">
           <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center mb-4 shadow-xl">
             <ShoppingCart size={40} strokeWidth={2.5} />
