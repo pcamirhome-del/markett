@@ -4,6 +4,7 @@ import { AppSettings, Role, User } from './types';
 export const INITIAL_SETTINGS: AppSettings = {
   appName: 'Market Pro',
   profitMargin: 14,
+  lowStockThreshold: 10,
   isGlassMode: false,
   sidebarNames: {
     dailySales: 'المبيعات اليومية',

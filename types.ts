@@ -72,6 +72,7 @@ export interface Sale {
 export interface AppSettings {
   appName: string;
   profitMargin: number;
+  lowStockThreshold: number;
   isGlassMode: boolean;
   sidebarNames: { [key: string]: string };
 }

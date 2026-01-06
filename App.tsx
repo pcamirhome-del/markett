@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
 import { 
   Bell, 
   Menu, 
@@ -20,7 +21,8 @@ import {
   Printer,
   FileSpreadsheet,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  ChevronDown
 } from 'lucide-react';
 import { 
   User, 
@@ -34,6 +36,25 @@ import {
 } from './types';
 import { INITIAL_SETTINGS, INITIAL_ADMIN } from './constants';
 
+// --- Firebase Configuration ---
+const firebaseConfig = {
+  apiKey: "AIzaSyAYdWvZbTTkGlfI6vv02EFUMbw5eeF4UpU",
+  authDomain: "sample-firebase-adddi-app.firebaseapp.com",
+  databaseURL: "https://sample-firebase-adddi-app-default-rtdb.firebaseio.com",
+  projectId: "sample-firebase-adddi-app",
+  storageBucket: "sample-firebase-adddi-app.firebasestorage.app",
+  messagingSenderId: "1013529485030",
+  appId: "1:1013529485030:web:3dd9b79cd7d7ba41b42527"
+};
+
+// Initialize Firebase
+try {
+  initializeApp(firebaseConfig);
+  console.log("Firebase initialized successfully");
+} catch (error) {
+  console.error("Firebase initialization failed", error);
+}
+
 // --- Main App Component ---
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -45,6 +66,7 @@ export default function App() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [activeSection, setActiveSection] = useState('dailySales');
   const [showLoginWelcome, setShowLoginWelcome] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [time, setTime] = useState(new Date());
 
   // Clock Update
@@ -52,6 +74,24 @@ export default function App() {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Compute Low Stock Items
+  const lowStockItems = useMemo(() => {
+    const items: { companyName: string; productName: string; stock: number; code: string }[] = [];
+    companies.forEach(company => {
+      company.products.forEach(product => {
+        if (product.stock <= settings.lowStockThreshold) {
+          items.push({
+            companyName: company.name,
+            productName: product.name,
+            stock: product.stock,
+            code: product.code
+          });
+        }
+      });
+    });
+    return items;
+  }, [companies, settings.lowStockThreshold]);
 
   // Format Time
   const formatTime = (date: Date) => {
@@ -104,7 +144,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-black">{settings.appName}</h1>
             <div className="h-4 w-px bg-current opacity-20 mx-2"></div>
-            <span className="text-sm font-medium hidden md:block">المستخدم: {currentUser.username}</span>
+            <span className="text-sm font-medium hidden md:block">{currentUser.username}</span>
           </div>
         </div>
 
@@ -116,15 +156,56 @@ export default function App() {
         <div className="flex items-center gap-2 md:gap-4">
           <button 
             onClick={() => setSettings(s => ({...s, isGlassMode: !s.isGlassMode}))}
-            className="p-2 hover:bg-black/10 rounded-full"
+            className="p-2 hover:bg-black/10 rounded-full transition-all"
             title="تغيير النمط"
           >
             <Palette size={20} />
           </button>
-          <button className="p-2 hover:bg-black/10 rounded-full relative">
-            <Bell size={20} />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-          </button>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+              className="p-2 hover:bg-black/10 rounded-full relative transition-all"
+            >
+              <Bell size={20} />
+              {lowStockItems.length > 0 && (
+                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white animate-pulse">
+                  {lowStockItems.length}
+                </span>
+              )}
+            </button>
+            
+            {isNotificationsOpen && (
+              <div className="absolute top-12 left-0 w-80 bg-white shadow-2xl rounded-2xl border border-slate-100 overflow-hidden z-[100] text-slate-800 animate-in fade-in slide-in-from-top-2">
+                <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
+                  <span className="font-bold text-sm">تنبيهات النواقص</span>
+                  <span className="text-[10px] px-2 py-0.5 bg-red-100 text-red-600 rounded-full">{lowStockItems.length} صنف</span>
+                </div>
+                <div className="max-h-64 overflow-y-auto divide-y">
+                  {lowStockItems.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 text-sm">لا يوجد نواقص حالياً</div>
+                  ) : (
+                    lowStockItems.map((item, idx) => (
+                      <div key={idx} className="p-3 hover:bg-slate-50 flex flex-col gap-1">
+                        <div className="flex justify-between items-start">
+                          <span className="font-bold text-xs">{item.productName}</span>
+                          <span className="text-red-500 font-black text-xs">{item.stock} قطع</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">الشركة: {item.companyName} | كود: {item.code}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <button 
+                  onClick={() => { setActiveSection('inventory'); setIsNotificationsOpen(false); }}
+                  className="w-full py-3 bg-slate-100 text-indigo-600 font-bold text-xs hover:bg-slate-200"
+                >
+                  عرض في المخزون
+                </button>
+              </div>
+            )}
+          </div>
+
           <button onClick={handleLogout} className="flex items-center gap-2 bg-red-50/10 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded-lg transition-all text-red-500 font-bold border border-red-500/20">
             <span className="hidden sm:inline">خروج</span>
             <LogOut size={18} />
@@ -169,7 +250,7 @@ export default function App() {
         {activeSection === 'createInvoice' && <CreateInvoiceSection companies={companies} invoices={invoices} setInvoices={setInvoices} />}
         {activeSection === 'transferredOrders' && <TransferredOrdersSection invoices={invoices} setInvoices={setInvoices} companies={companies} setCompanies={setCompanies} />}
         {activeSection === 'priceLists' && <PriceListsSection companies={companies} setCompanies={setCompanies} />}
-        {activeSection === 'inventory' && <InventorySection invoices={invoices} companies={companies} />}
+        {activeSection === 'inventory' && <InventorySection invoices={invoices} companies={companies} lowStockItems={lowStockItems} />}
         {activeSection === 'salesReports' && <SalesReportsSection sales={sales} companies={companies} />}
         {activeSection === 'settings' && <SettingsSection settings={settings} setSettings={setSettings} users={users} setUsers={setUsers} />}
       </main>
@@ -214,7 +295,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => void }) {
               value={u}
               onChange={(e) => setU(e.target.value)}
               className="w-full bg-white/10 border border-white/20 rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white/20 transition-all placeholder-white/30"
-              placeholder="admin"
+              placeholder="اكتب هنا"
               required
             />
           </div>
@@ -319,7 +400,7 @@ function CreateInvoiceSection({ companies, invoices, setInvoices }: { companies:
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input 
                 type="text" 
-                className="w-full pr-10 pl-4 py-2 bg-slate-50 border rounded-xl" 
+                className="w-full pr-10 pl-4 py-2 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
                 placeholder="أول حروف من الشركة..."
                 value={searchCompany}
                 onChange={(e) => setSearchCompany(e.target.value)}
@@ -331,7 +412,7 @@ function CreateInvoiceSection({ companies, invoices, setInvoices }: { companies:
             <select 
               value={selectedCompanyId} 
               onChange={(e) => setSelectedCompanyId(e.target.value)}
-              className="w-full px-4 py-2 bg-slate-50 border rounded-xl"
+              className="w-full px-4 py-2 bg-slate-50 border rounded-xl outline-none"
             >
               <option value="">-- اختر شركة --</option>
               {filteredCompanies.map(c => (
@@ -341,7 +422,7 @@ function CreateInvoiceSection({ companies, invoices, setInvoices }: { companies:
           </div>
           <button 
             onClick={handleCreateInvoice}
-            className="bg-indigo-600 text-white px-8 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-colors"
+            className="bg-indigo-600 text-white px-8 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg active:scale-95"
           >
             إنشاء
           </button>
@@ -349,11 +430,11 @@ function CreateInvoiceSection({ companies, invoices, setInvoices }: { companies:
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-3xl overflow-hidden flex flex-col shadow-2xl">
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-3xl overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-300">
             <div className="p-6 border-b flex justify-between items-center bg-slate-50">
               <h3 className="text-lg font-black">فاتورة رقم #{invoiceId}</h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-full"><X /></button>
+              <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-full transition-all"><X /></button>
             </div>
             <div className="p-6 flex-1 overflow-y-auto">
               <table className="w-full text-right">
@@ -361,16 +442,16 @@ function CreateInvoiceSection({ companies, invoices, setInvoices }: { companies:
                   <tr className="border-b text-slate-500 text-sm">
                     <th className="pb-4 font-medium">كود الصنف</th>
                     <th className="pb-4 font-medium">اسم المنتج</th>
-                    <th className="pb-4 font-medium">السعر</th>
-                    <th className="pb-4 font-medium">الكمية</th>
-                    <th className="pb-4 font-medium">المخزون الحالي</th>
-                    <th className="pb-4 font-medium">الإجمالي</th>
+                    <th className="pb-4 font-medium text-center">السعر</th>
+                    <th className="pb-4 font-medium text-center">الكمية</th>
+                    <th className="pb-4 font-medium text-center">المخزون الحالي</th>
+                    <th className="pb-4 font-medium text-left">الإجمالي</th>
                     <th className="pb-4 w-10"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {currentItems.map((item, idx) => (
-                    <tr key={idx} className="group">
+                    <tr key={idx} className="group hover:bg-slate-50/50">
                       <td className="py-3">
                         <input 
                           type="text" 
@@ -380,26 +461,26 @@ function CreateInvoiceSection({ companies, invoices, setInvoices }: { companies:
                         />
                       </td>
                       <td className="py-3 font-medium text-slate-700">{item.name || '---'}</td>
-                      <td className="py-3">
+                      <td className="py-3 text-center">
                         <input 
                           type="number" 
                           value={item.price} 
                           onChange={(e) => updateItem(idx, 'price', parseFloat(e.target.value))}
-                          className="w-20 bg-slate-100 border-none rounded-lg px-2 py-1 text-sm"
+                          className="w-24 text-center bg-slate-100 border-none rounded-lg px-2 py-1 text-sm"
                         />
                       </td>
-                      <td className="py-3">
+                      <td className="py-3 text-center">
                         <input 
                           type="number" 
                           value={item.quantity} 
                           onChange={(e) => updateItem(idx, 'quantity', parseInt(e.target.value))}
-                          className="w-20 bg-slate-100 border-none rounded-lg px-2 py-1 text-sm"
+                          className="w-20 text-center bg-slate-100 border-none rounded-lg px-2 py-1 text-sm"
                         />
                       </td>
-                      <td className="py-3 text-slate-400">{item.stock}</td>
-                      <td className="py-3 font-bold text-indigo-600">{item.subtotal.toFixed(2)} ج.م</td>
-                      <td className="py-3">
-                        <button onClick={() => setCurrentItems(currentItems.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600">
+                      <td className="py-3 text-center text-slate-400 font-mono">{item.stock}</td>
+                      <td className="py-3 font-bold text-indigo-600 text-left">{item.subtotal.toFixed(2)} ج.م</td>
+                      <td className="py-3 text-left">
+                        <button onClick={() => setCurrentItems(currentItems.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 p-2">
                           <Trash2 size={16} />
                         </button>
                       </td>
@@ -407,15 +488,15 @@ function CreateInvoiceSection({ companies, invoices, setInvoices }: { companies:
                   ))}
                 </tbody>
               </table>
-              <button onClick={addItem} className="mt-4 flex items-center gap-2 text-indigo-600 font-bold hover:underline">
-                <Plus size={18} /> أضف صنف
+              <button onClick={addItem} className="mt-6 flex items-center gap-2 text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all">
+                <Plus size={18} /> أضف صنف جديد
               </button>
             </div>
             <div className="p-6 bg-slate-50 border-t flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="text-2xl font-black text-slate-800">إجمالي الفاتورة: <span className="text-indigo-600">{total.toFixed(2)} ج.م</span></div>
               <div className="flex gap-2">
-                <button onClick={() => setIsModalOpen(false)} className="px-6 py-2 rounded-xl font-bold bg-slate-200 text-slate-600 hover:bg-slate-300">إلغاء</button>
-                <button onClick={handleSave} className="px-10 py-2 rounded-xl font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg">حفظ وترحيل</button>
+                <button onClick={() => setIsModalOpen(false)} className="px-6 py-2 rounded-xl font-bold bg-slate-200 text-slate-600 hover:bg-slate-300 transition-all">إلغاء</button>
+                <button onClick={handleSave} className="px-10 py-2 rounded-xl font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg transition-all active:scale-95">حفظ وترحيل</button>
               </div>
             </div>
           </div>
@@ -499,7 +580,7 @@ function TransferredOrdersSection({ invoices, setInvoices, companies, setCompani
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
             type="text" 
-            className="w-full pr-10 pl-4 py-3 bg-slate-50 border rounded-xl" 
+            className="w-full pr-10 pl-4 py-3 bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
             placeholder="ابحث برقم الفاتورة أو اسم الشركة..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -513,9 +594,9 @@ function TransferredOrdersSection({ invoices, setInvoices, companies, setCompani
           const remaining = inv.total - paidTotal;
           
           return (
-            <div key={inv.id} onClick={() => setSelectedInvoice(inv)} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all cursor-pointer group">
+            <div key={inv.id} onClick={() => setSelectedInvoice(inv)} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group">
               <div className="flex justify-between items-start mb-4">
-                <span className="text-xs font-bold text-slate-400">#{inv.id}</span>
+                <span className="text-xs font-bold text-slate-400 font-mono">#{inv.id}</span>
                 <span className={`px-2 py-1 rounded-lg text-[10px] font-bold ${inv.status === 'تم التسليم' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
                   {inv.status}
                 </span>
@@ -539,75 +620,75 @@ function TransferredOrdersSection({ invoices, setInvoices, companies, setCompani
       </div>
 
       {selectedInvoice && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl overflow-hidden flex flex-col shadow-2xl">
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl overflow-hidden flex flex-col shadow-2xl animate-in zoom-in">
             <div className="p-6 border-b flex justify-between items-center bg-slate-50">
               <div className="flex items-center gap-4">
                 <h3 className="text-lg font-black">تفاصيل الفاتورة #{selectedInvoice.id}</h3>
-                <button onClick={() => toggleDelivery(selectedInvoice)} className={`px-4 py-1 rounded-full text-xs font-bold ${selectedInvoice.status === 'تم التسليم' ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                <button onClick={() => toggleDelivery(selectedInvoice)} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${selectedInvoice.status === 'تم التسليم' ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}>
                   {selectedInvoice.status === 'تم التسليم' ? 'تم التسليم' : 'تغيير لتم التسليم؟'}
                 </button>
               </div>
-              <button onClick={() => setSelectedInvoice(null)} className="p-1 hover:bg-slate-200 rounded-full"><X /></button>
+              <button onClick={() => setSelectedInvoice(null)} className="p-1 hover:bg-slate-200 rounded-full transition-all"><X /></button>
             </div>
             
             <div className="p-6 flex-1 overflow-y-auto">
               <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-slate-50 p-4 rounded-2xl">
-                  <p className="text-xs text-slate-400">الشركة</p>
+                  <p className="text-xs text-slate-400 mb-1">الشركة</p>
                   <p className="font-bold">{selectedInvoice.companyName}</p>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-2xl">
-                  <p className="text-xs text-slate-400">التاريخ</p>
+                  <p className="text-xs text-slate-400 mb-1">التاريخ</p>
                   <p className="font-bold">{new Date(selectedInvoice.date).toLocaleDateString('ar-EG')}</p>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-2xl">
-                  <p className="text-xs text-slate-400">الإجمالي</p>
+                  <p className="text-xs text-slate-400 mb-1">الإجمالي</p>
                   <p className="font-bold text-indigo-600">{selectedInvoice.total.toFixed(2)}</p>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-2xl">
-                  <p className="text-xs text-slate-400">الحالة</p>
+                  <p className="text-xs text-slate-400 mb-1">الحالة</p>
                   <p className="font-bold text-red-500">{selectedInvoice.status}</p>
                 </div>
               </div>
 
-              <h4 className="font-black mb-4 flex items-center gap-2"><List size={18}/> الأصناف</h4>
+              <h4 className="font-black mb-4 flex items-center gap-2 text-slate-700"><List size={18} className="text-indigo-600"/> الأصناف الملحقة</h4>
               <table className="w-full text-right mb-8">
                 <thead className="text-slate-400 text-xs uppercase">
                   <tr className="border-b">
                     <th className="pb-2">الكود</th>
                     <th className="pb-2">الصنف</th>
-                    <th className="pb-2">الكمية</th>
-                    <th className="pb-2">السعر</th>
-                    <th className="pb-2">الإجمالي</th>
+                    <th className="pb-2 text-center">الكمية</th>
+                    <th className="pb-2 text-center">السعر</th>
+                    <th className="pb-2 text-left">الإجمالي</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y">
                   {selectedInvoice.items.map((item, idx) => (
-                    <tr key={idx} className="border-b last:border-0">
-                      <td className="py-3 text-sm">{item.code}</td>
+                    <tr key={idx} className="hover:bg-slate-50/50">
+                      <td className="py-3 text-sm font-mono">{item.code}</td>
                       <td className="py-3 font-bold">{item.name}</td>
-                      <td className="py-3">{item.quantity}</td>
-                      <td className="py-3">{item.price.toFixed(2)}</td>
-                      <td className="py-3 font-bold">{item.subtotal.toFixed(2)}</td>
+                      <td className="py-3 text-center">{item.quantity}</td>
+                      <td className="py-3 text-center">{item.price.toFixed(2)}</td>
+                      <td className="py-3 font-bold text-left">{item.subtotal.toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
 
               <div className="border-t pt-6">
-                <h4 className="font-black mb-4 flex items-center gap-2"><ShoppingCart size={18}/> الدفعات (بحد أقصى 3)</h4>
+                <h4 className="font-black mb-4 flex items-center gap-2 text-slate-700"><ShoppingCart size={18} className="text-indigo-600"/> الدفعات المالية (بحد أقصى 3)</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                   {selectedInvoice.payments.map((p, idx) => (
-                    <div key={idx} className="bg-green-50 p-3 rounded-xl border border-green-100">
-                      <p className="text-xs text-green-600 font-bold">دفعة {idx + 1}</p>
-                      <p className="text-lg font-black text-green-700">{p.amount.toFixed(2)} ج.م</p>
-                      <p className="text-[10px] text-green-500">{new Date(p.date).toLocaleDateString()}</p>
+                    <div key={idx} className="bg-green-50 p-4 rounded-xl border border-green-100 shadow-sm">
+                      <p className="text-xs text-green-600 font-bold mb-1">دفعة {idx + 1}</p>
+                      <p className="text-xl font-black text-green-700">{p.amount.toFixed(2)} ج.م</p>
+                      <p className="text-[10px] text-green-500 mt-1">{new Date(p.date).toLocaleDateString()}</p>
                     </div>
                   ))}
                   {selectedInvoice.payments.length < 3 && (
-                    <div className="flex flex-col gap-2">
-                      <input id="paymentInput" type="number" placeholder="قيمة الدفعة..." className="w-full px-3 py-2 border rounded-xl text-sm" />
+                    <div className="bg-slate-50 p-3 rounded-xl border border-dashed border-slate-300 flex flex-col gap-2">
+                      <input id="paymentInput" type="number" placeholder="ادخل المبلغ..." className="w-full px-3 py-2 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
                       <button 
                         onClick={() => {
                           const input = document.getElementById('paymentInput') as HTMLInputElement;
@@ -617,21 +698,21 @@ function TransferredOrdersSection({ invoices, setInvoices, companies, setCompani
                             input.value = '';
                           }
                         }}
-                        className="bg-indigo-600 text-white py-2 rounded-xl text-sm font-bold"
+                        className="bg-indigo-600 text-white py-2 rounded-xl text-xs font-bold shadow-md hover:bg-indigo-700 transition-all active:scale-95"
                       >
-                        أضف دفعة
+                        إضافة دفعة
                       </button>
                     </div>
                   )}
                 </div>
-                <div className="flex justify-between p-4 bg-slate-900 text-white rounded-2xl">
+                <div className="flex justify-between p-6 bg-slate-900 text-white rounded-2xl shadow-xl mt-6">
                   <div>
-                    <p className="text-xs opacity-50">إجمالي المدفوع</p>
-                    <p className="text-xl font-black">{selectedInvoice.payments.reduce((a, b) => a + b.amount, 0).toFixed(2)} ج.م</p>
+                    <p className="text-xs opacity-50 uppercase tracking-wider mb-1">إجمالي المدفوع</p>
+                    <p className="text-2xl font-black">{selectedInvoice.payments.reduce((a, b) => a + b.amount, 0).toFixed(2)} ج.م</p>
                   </div>
                   <div className="text-left">
-                    <p className="text-xs opacity-50">المتبقي</p>
-                    <p className="text-xl font-black text-red-400">
+                    <p className="text-xs opacity-50 uppercase tracking-wider mb-1">المبلغ المتبقي</p>
+                    <p className="text-2xl font-black text-red-400">
                       {(selectedInvoice.total - selectedInvoice.payments.reduce((a, b) => a + b.amount, 0)).toFixed(2)} ج.م
                     </p>
                   </div>
@@ -640,13 +721,13 @@ function TransferredOrdersSection({ invoices, setInvoices, companies, setCompani
             </div>
 
             <div className="p-6 bg-slate-50 border-t flex justify-end gap-3">
-              <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-slate-200 rounded-xl font-bold hover:bg-slate-300 transition-all">
+              <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-2 bg-slate-200 rounded-xl font-bold hover:bg-slate-300 transition-all">
                 <Printer size={18}/> طباعة
               </button>
-              <button onClick={() => handleExcelExport(selectedInvoice)} className="flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 border border-green-200 rounded-xl font-bold hover:bg-green-200 transition-all">
+              <button onClick={() => handleExcelExport(selectedInvoice)} className="flex items-center gap-2 px-6 py-2 bg-green-100 text-green-700 border border-green-200 rounded-xl font-bold hover:bg-green-200 transition-all">
                 <FileSpreadsheet size={18}/> إكسيل
               </button>
-              <button onClick={() => setSelectedInvoice(null)} className="px-8 py-2 bg-slate-800 text-white rounded-xl font-bold">إغلاق</button>
+              <button onClick={() => setSelectedInvoice(null)} className="px-10 py-2 bg-slate-800 text-white rounded-xl font-bold transition-all active:scale-95">إغلاق</button>
             </div>
           </div>
         </div>
@@ -663,6 +744,7 @@ function PriceListsSection({ companies, setCompanies }: { companies: Company[], 
   const [selectedComp, setSelectedComp] = useState<Company | null>(null);
 
   const handleAddCompany = () => {
+    if (!newComp.name) return alert('ادخل اسم الشركة');
     const id = companies.length > 0 ? Math.max(...companies.map(c => c.id)) + 1 : 10;
     setCompanies([...companies, { ...newComp, id }]);
     setIsModalOpen(false);
@@ -677,7 +759,7 @@ function PriceListsSection({ companies, setCompanies }: { companies: Company[], 
     const updated = [...newComp.products];
     updated[idx] = { ...updated[idx], [field]: value };
     if (field === 'priceBeforeTax') {
-      updated[idx].priceAfterTax = value * 1.14; // Default tax representation
+      updated[idx].priceAfterTax = value * 1.14; 
     }
     setNewComp({ ...newComp, products: updated });
   };
@@ -694,12 +776,12 @@ function PriceListsSection({ companies, setCompanies }: { companies: Company[], 
             <input 
               type="text" 
               placeholder="ابحث عن شركة..." 
-              className="w-full pr-10 pl-4 py-2 border rounded-xl"
+              className="w-full pr-10 pl-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 whitespace-nowrap">
+          <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg active:scale-95 transition-all">
             <Plus size={18}/> أضف شركة
           </button>
         </div>
@@ -707,103 +789,115 @@ function PriceListsSection({ companies, setCompanies }: { companies: Company[], 
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {filtered.map(c => (
-          <div key={c.id} onClick={() => setSelectedComp(c)} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-300 cursor-pointer transition-all">
-            <p className="text-xs text-slate-400 mb-1">كود #{c.id}</p>
-            <h3 className="text-xl font-black mb-4">{c.name}</h3>
+          <div key={c.id} onClick={() => setSelectedComp(c)} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-300 hover:shadow-lg cursor-pointer transition-all">
+            <p className="text-xs text-slate-400 mb-1 font-mono">#{c.id}</p>
+            <h3 className="text-xl font-black mb-4 truncate">{c.name}</h3>
             <div className="flex justify-between items-center text-sm text-slate-500">
-              <span>{c.products.length} صنف</span>
-              <span className="text-indigo-600 font-bold">عرض التفاصيل &larr;</span>
+              <span className="bg-slate-50 px-2 py-1 rounded-lg border">{c.products.length} صنف</span>
+              <span className="text-indigo-600 font-bold flex items-center gap-1 hover:gap-2 transition-all">التفاصيل <ChevronDown size={14} className="-rotate-90"/></span>
             </div>
           </div>
         ))}
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl overflow-hidden flex flex-col shadow-2xl">
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl overflow-hidden flex flex-col shadow-2xl animate-in zoom-in">
             <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-              <h3 className="text-lg font-black">إضافة شركة جديدة</h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-full"><X /></button>
+              <h3 className="text-lg font-black">إضافة شركة جديدة وقائمة أسعار</h3>
+              <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-full transition-all"><X /></button>
             </div>
             <div className="p-6 flex-1 overflow-y-auto space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="text-sm font-bold block mb-1">اسم الشركة</label>
-                  <input type="text" className="w-full px-4 py-2 border rounded-xl" value={newComp.name} onChange={(e) => setNewComp({...newComp, name: e.target.value})} />
+                  <label className="text-sm font-bold block mb-1 pr-1">اسم الشركة الموردة</label>
+                  <input type="text" className="w-full px-4 py-3 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" value={newComp.name} onChange={(e) => setNewComp({...newComp, name: e.target.value})} placeholder="مثال: شركة النصر للاستيراد" />
                 </div>
                 <div>
-                  <label className="text-sm font-bold block mb-1">كود الشركة (تلقائي)</label>
-                  <input type="text" className="w-full px-4 py-2 border rounded-xl bg-slate-50" value={companies.length > 0 ? Math.max(...companies.map(c => c.id)) + 1 : 10} disabled />
+                  <label className="text-sm font-bold block mb-1 pr-1 text-slate-400">كود الشركة (تلقائي)</label>
+                  <input type="text" className="w-full px-4 py-3 border rounded-xl bg-slate-50 text-slate-400 font-mono" value={companies.length > 0 ? Math.max(...companies.map(c => c.id)) + 1 : 10} disabled />
                 </div>
               </div>
 
-              <div className="mt-8">
-                <h4 className="font-bold mb-4">قائمة الأصناف</h4>
-                <table className="w-full text-right">
-                  <thead>
-                    <tr className="border-b text-xs text-slate-400">
-                      <th className="pb-2">كود الصنف</th>
-                      <th className="pb-2">اسم الصنف</th>
-                      <th className="pb-2">السعر (قبل الضريبة)</th>
-                      <th className="pb-2">السعر (بعد الضريبة)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {newComp.products.map((p, idx) => (
-                      <tr key={idx} className="border-b">
-                        <td className="py-2"><input type="text" className="w-full bg-slate-50 border-none rounded-lg p-1" onChange={(e) => updateProductRow(idx, 'code', e.target.value)} /></td>
-                        <td className="py-2"><input type="text" className="w-full bg-slate-50 border-none rounded-lg p-1" onChange={(e) => updateProductRow(idx, 'name', e.target.value)} /></td>
-                        <td className="py-2"><input type="number" className="w-full bg-slate-50 border-none rounded-lg p-1" onChange={(e) => updateProductRow(idx, 'priceBeforeTax', parseFloat(e.target.value))} /></td>
-                        <td className="py-2 text-slate-400 p-1">{(p.priceBeforeTax * 1.14).toFixed(2)}</td>
+              <div className="mt-10 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                <h4 className="font-black mb-6 text-slate-700 flex justify-between items-center">
+                  قائمة الأصناف
+                  <button onClick={addProductRow} className="bg-white border-2 border-indigo-600 text-indigo-600 px-4 py-1.5 rounded-xl text-sm font-black hover:bg-indigo-600 hover:text-white transition-all">+ أضف سطر</button>
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right">
+                    <thead>
+                      <tr className="text-xs text-slate-400 uppercase tracking-wider">
+                        <th className="pb-4 font-bold">كود الصنف</th>
+                        <th className="pb-4 font-bold">اسم الصنف</th>
+                        <th className="pb-4 font-bold text-center">السعر قبل الضريبة</th>
+                        <th className="pb-4 font-bold text-center">السعر بعد الضريبة</th>
+                        <th className="pb-4 w-10"></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <button onClick={addProductRow} className="mt-4 flex items-center gap-2 text-indigo-600 font-bold"><Plus size={16}/> أضف صنف</button>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {newComp.products.map((p, idx) => (
+                        <tr key={idx} className="group">
+                          <td className="py-2 pr-2"><input type="text" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" onChange={(e) => updateProductRow(idx, 'code', e.target.value)} placeholder="الكود" /></td>
+                          <td className="py-2"><input type="text" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" onChange={(e) => updateProductRow(idx, 'name', e.target.value)} placeholder="اسم المنتج" /></td>
+                          <td className="py-2"><input type="number" className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm text-center focus:ring-2 focus:ring-indigo-500 outline-none" onChange={(e) => updateProductRow(idx, 'priceBeforeTax', parseFloat(e.target.value))} placeholder="0.00" /></td>
+                          <td className="py-2 text-center font-bold text-slate-500">{(p.priceBeforeTax * 1.14).toFixed(2)}</td>
+                          <td className="py-2 text-left">
+                             <button onClick={() => setNewComp({...newComp, products: newComp.products.filter((_, i) => i !== idx)})} className="text-red-300 hover:text-red-500 p-2"><Trash2 size={14}/></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
             <div className="p-6 border-t flex justify-end gap-3 bg-slate-50">
-              <button onClick={() => setIsModalOpen(false)} className="px-6 py-2 rounded-xl bg-slate-200 font-bold">إلغاء</button>
-              <button onClick={handleAddCompany} className="px-10 py-2 rounded-xl bg-indigo-600 text-white font-bold shadow-lg">حفظ القائمة</button>
+              <button onClick={() => setIsModalOpen(false)} className="px-6 py-2 rounded-xl bg-slate-200 font-bold transition-all">إلغاء</button>
+              <button onClick={handleAddCompany} className="px-10 py-2 rounded-xl bg-indigo-600 text-white font-bold shadow-xl transition-all active:scale-95">حفظ الشركة والقائمة</button>
             </div>
           </div>
         </div>
       )}
 
       {selectedComp && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl overflow-hidden flex flex-col shadow-2xl">
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl overflow-hidden flex flex-col shadow-2xl animate-in zoom-in">
             <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-              <h3 className="text-lg font-black">{selectedComp.name} - قائمة الأسعار</h3>
-              <button onClick={() => setSelectedComp(null)} className="p-1 hover:bg-slate-200 rounded-full"><X /></button>
+              <h3 className="text-lg font-black">{selectedComp.name} - قائمة الأسعار الرسمية</h3>
+              <button onClick={() => setSelectedComp(null)} className="p-1 hover:bg-slate-200 rounded-full transition-all"><X /></button>
             </div>
             <div className="p-6 flex-1 overflow-y-auto">
               <table className="w-full text-right">
                 <thead>
-                  <tr className="border-b text-slate-400">
-                    <th className="pb-2">الكود</th>
-                    <th className="pb-2">الصنف</th>
-                    <th className="pb-2 text-center">السعر قبل الضريبة</th>
-                    <th className="pb-2 text-center">السعر بعد الضريبة</th>
-                    <th className="pb-2 text-center">المخزون</th>
+                  <tr className="border-b text-slate-400 text-xs">
+                    <th className="pb-3 font-bold">كود المنتج</th>
+                    <th className="pb-3 font-bold">اسم الصنف</th>
+                    <th className="pb-3 text-center font-bold">السعر قبل الضريبة</th>
+                    <th className="pb-3 text-center font-bold">السعر بعد الضريبة</th>
+                    <th className="pb-3 text-left font-bold">المخزون الحالي</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                   {selectedComp.products.map((p, idx) => (
-                    <tr key={idx} className="border-b hover:bg-slate-50 transition-colors">
-                      <td className="py-3 font-mono">{p.code}</td>
-                      <td className="py-3 font-bold">{p.name}</td>
-                      <td className="py-3 text-center">{p.priceBeforeTax.toFixed(2)}</td>
-                      <td className="py-3 text-center font-bold text-green-600">{p.priceAfterTax.toFixed(2)}</td>
-                      <td className="py-3 text-center text-slate-400">{p.stock}</td>
+                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-4 font-mono text-sm">#{p.code}</td>
+                      <td className="py-4 font-black text-slate-700">{p.name}</td>
+                      <td className="py-4 text-center">{p.priceBeforeTax.toFixed(2)}</td>
+                      <td className="py-4 text-center font-bold text-green-600">{p.priceAfterTax.toFixed(2)}</td>
+                      <td className="py-4 text-left">
+                        <span className={`px-2 py-1 rounded-lg text-xs font-bold ${p.stock <= 10 ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-500'}`}>
+                          {p.stock} قطعة
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div className="p-6 border-t flex justify-end gap-3 bg-slate-50">
-              <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-2 rounded-xl bg-slate-200 font-bold"><Printer size={18}/> طباعة</button>
-              <button onClick={() => setSelectedComp(null)} className="px-10 py-2 rounded-xl bg-slate-800 text-white font-bold">إغلاق</button>
+              <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-2 bg-slate-200 rounded-xl font-bold hover:bg-slate-300 transition-all"><Printer size={18}/> طباعة</button>
+              <button onClick={() => setSelectedComp(null)} className="px-12 py-2 rounded-xl bg-slate-800 text-white font-bold transition-all active:scale-95">إغلاق</button>
             </div>
           </div>
         </div>
@@ -813,65 +907,118 @@ function PriceListsSection({ companies, setCompanies }: { companies: Company[], 
 }
 
 // --- Section: Inventory (4) ---
-function InventorySection({ invoices, companies }: { invoices: Invoice[], companies: Company[] }) {
+function InventorySection({ invoices, companies, lowStockItems }: { invoices: Invoice[], companies: Company[], lowStockItems: any[] }) {
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<'all' | 'low'>('all');
+  
   const deliveredInvoices = invoices.filter(inv => inv.status === 'تم التسليم');
 
-  const filtered = deliveredInvoices.filter(inv => 
+  const filteredInvoices = deliveredInvoices.filter(inv => 
     inv.companyName.includes(search) || 
     inv.items.some(it => it.code.includes(search) || it.name.includes(search))
+  );
+
+  const filteredLowStock = lowStockItems.filter(item => 
+    item.productName.includes(search) || item.code.includes(search)
   );
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h2 className="text-2xl font-black flex items-center gap-2"><Box className="text-indigo-600"/> المخزون والمشتريات المستلمة</h2>
+        <h2 className="text-2xl font-black flex items-center gap-2"><Box className="text-indigo-600"/> المخزون والتوريدات</h2>
         <div className="relative flex-1 md:max-w-md w-full">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
           <input 
             type="text" 
-            placeholder="بحث بشركة أو منتج..." 
-            className="w-full pr-10 pl-4 py-2 border rounded-xl"
+            placeholder="بحث بشركة، منتج أو كود..." 
+            className="w-full pr-10 pl-4 py-3 border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-        <table className="w-full text-right">
-          <thead className="bg-slate-50 text-slate-400 text-sm">
-            <tr>
-              <th className="p-4 font-medium">رقم الفاتورة</th>
-              <th className="p-4 font-medium">الشركة</th>
-              <th className="p-4 font-medium">عدد الأصناف</th>
-              <th className="p-4 font-medium">القيمة النهائية</th>
-              <th className="p-4 font-medium">تاريخ الاستلام</th>
-              <th className="p-4 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {filtered.map(inv => (
-              <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
-                <td className="p-4 font-bold text-slate-500">#{inv.id}</td>
-                <td className="p-4 font-black">{inv.companyName}</td>
-                <td className="p-4">{inv.items.length}</td>
-                <td className="p-4 font-bold text-indigo-600">{inv.total.toFixed(2)}</td>
-                <td className="p-4 text-slate-400">{new Date(inv.date).toLocaleDateString()}</td>
-                <td className="p-4">
-                  <button className="text-indigo-600 font-bold text-sm hover:underline">عرض التفاصيل</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filtered.length === 0 && (
-          <div className="p-20 text-center text-slate-300">
-            <Box size={48} className="mx-auto mb-4 opacity-20"/>
-            <p>لا يوجد أوردرات مستلمة حالياً</p>
-          </div>
-        )}
+      <div className="flex gap-2 p-1 bg-slate-200 w-fit rounded-2xl">
+        <button onClick={() => setTab('all')} className={`px-6 py-2 rounded-xl font-bold transition-all ${tab === 'all' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:bg-white/50'}`}>المشتريات المستلمة</button>
+        <button onClick={() => setTab('low')} className={`px-6 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${tab === 'low' ? 'bg-white shadow-sm text-red-600' : 'text-slate-500 hover:bg-white/50'}`}>
+          النواقص (Low Stock)
+          {lowStockItems.length > 0 && <span className="bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full animate-pulse">{lowStockItems.length}</span>}
+        </button>
       </div>
+
+      {tab === 'all' ? (
+        <div className="bg-white rounded-3xl shadow-sm border overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <table className="w-full text-right">
+            <thead className="bg-slate-50 text-slate-400 text-xs uppercase">
+              <tr>
+                <th className="p-5 font-bold">رقم الفاتورة</th>
+                <th className="p-5 font-bold">الشركة الموردة</th>
+                <th className="p-5 font-bold text-center">الأصناف</th>
+                <th className="p-5 font-bold text-center">القيمة النهائية</th>
+                <th className="p-5 font-bold text-center">تاريخ الاستلام</th>
+                <th className="p-5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredInvoices.map(inv => (
+                <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="p-5 font-mono text-slate-400">#{inv.id}</td>
+                  <td className="p-5 font-black text-slate-700">{inv.companyName}</td>
+                  <td className="p-5 text-center font-medium">{inv.items.length}</td>
+                  <td className="p-5 text-center font-bold text-indigo-600">{inv.total.toFixed(2)}</td>
+                  <td className="p-5 text-center text-slate-400 text-sm">{new Date(inv.date).toLocaleDateString()}</td>
+                  <td className="p-5 text-left">
+                    <button className="text-indigo-600 font-bold text-xs hover:underline">فتح الفاتورة</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredInvoices.length === 0 && (
+            <div className="p-24 text-center text-slate-300">
+              <Box size={64} className="mx-auto mb-4 opacity-10"/>
+              <p className="text-lg">لا توجد بيانات توريدات حالياً</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-3xl shadow-sm border overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <table className="w-full text-right">
+            <thead className="bg-red-50 text-red-400 text-xs uppercase">
+              <tr>
+                <th className="p-5 font-bold">كود المنتج</th>
+                <th className="p-5 font-bold">اسم الصنف</th>
+                <th className="p-5 font-bold">الشركة</th>
+                <th className="p-5 font-bold text-center">الكمية المتبقية</th>
+                <th className="p-5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredLowStock.map((item, idx) => (
+                <tr key={idx} className="hover:bg-red-50/30 transition-colors">
+                  <td className="p-5 font-mono text-slate-400">#{item.code}</td>
+                  <td className="p-5 font-black text-slate-700">{item.productName}</td>
+                  <td className="p-5 font-medium">{item.companyName}</td>
+                  <td className="p-5 text-center">
+                    <span className="bg-red-100 text-red-600 px-4 py-1 rounded-full font-black">
+                      {item.stock} قطع متبقية
+                    </span>
+                  </td>
+                  <td className="p-5 text-left">
+                    <button className="bg-red-600 text-white px-4 py-1 rounded-lg text-xs font-bold hover:bg-red-700 shadow-sm">طلب توريد</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredLowStock.length === 0 && (
+            <div className="p-24 text-center text-slate-300">
+              <AlertCircle size={64} className="mx-auto mb-4 opacity-10"/>
+              <p className="text-lg">المخزون جيد حالياً ولا توجد نواقص</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -885,25 +1032,19 @@ function DailySalesSection({ settings, companies, sales, setSales, setCompanies 
   const handleAddToCart = () => {
     // Search product in all companies
     let foundProd: Product | null = null;
-    let companyIdx = -1;
 
-    companies.forEach((c, idx) => {
+    companies.forEach((c) => {
       const p = c.products.find(prod => prod.code === itemCode);
-      if (p) {
-        foundProd = p;
-        companyIdx = idx;
-      }
+      if (p) foundProd = p;
     });
 
-    if (!foundProd) {
-      alert('المنتج غير موجود');
-      return;
-    }
+    if (!foundProd) return alert('المنتج غير موجود في قاعدة البيانات');
+    if ((foundProd as Product).stock <= 0) return alert('هذا الصنف نفذ من المخزن!');
 
-    const price = foundProd!.priceAfterTax * (1 + (settings.profitMargin / 100));
+    const price = (foundProd as Product).priceAfterTax * (1 + (settings.profitMargin / 100));
     const newItem: SaleItem = {
-      code: foundProd!.code,
-      name: foundProd!.name,
+      code: (foundProd as Product).code,
+      name: (foundProd as Product).name,
       price: price,
       quantity: 1,
       subtotal: price
@@ -943,49 +1084,50 @@ function DailySalesSection({ settings, companies, sales, setSales, setCompanies 
     setSales([...sales, newSale]);
     setCurrentCart([]);
     setReceived(0);
-    alert('تم حفظ البيع بنجاح');
+    alert('تمت العملية وحفظ الفاتورة');
   };
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-full">
       <div className="flex-1 space-y-6">
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-          <h2 className="text-xl font-black mb-6 flex items-center gap-2"><ShoppingCart className="text-indigo-600"/> المبيعات اليومية (كاشير)</h2>
+          <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-700"><ShoppingCart className="text-indigo-600"/> نظام الكاشير (المبيعات اليومية)</h2>
           <div className="flex gap-2">
             <input 
               type="text" 
               className="flex-1 bg-slate-50 border rounded-2xl px-6 py-4 text-xl font-bold focus:ring-4 focus:ring-indigo-100 transition-all outline-none" 
-              placeholder="امسح الباركود أو ادخل كود الصنف..."
+              placeholder="امسح الباركود أو ادخل كود الصنف يدوياً..."
               value={itemCode}
               onChange={(e) => setItemCode(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddToCart()}
+              autoFocus
             />
-            <button onClick={handleAddToCart} className="bg-indigo-600 text-white px-8 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg">إضافة</button>
+            <button onClick={handleAddToCart} className="bg-indigo-600 text-white px-10 rounded-2xl font-black text-lg hover:bg-indigo-700 transition-all shadow-lg active:scale-95">إضافة</button>
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-4 bg-slate-50 border-b font-bold flex justify-between">
-            <span>قائمة الأصناف</span>
-            <span className="text-slate-400">{currentCart.length} منتج</span>
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden min-h-[400px] flex flex-col animate-in fade-in duration-700">
+          <div className="p-4 bg-slate-50 border-b font-black text-slate-500 flex justify-between items-center text-sm">
+            <span>عناصر الفاتورة الحالية</span>
+            <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-[10px]">{currentCart.length} منتجات</span>
           </div>
-          <div className="min-h-[300px] overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4">
             <table className="w-full text-right">
               <thead>
-                <tr className="text-xs text-slate-400 border-b">
-                  <th className="pb-2">الكود</th>
-                  <th className="pb-2">الصنف</th>
-                  <th className="pb-2 text-center">السعر</th>
-                  <th className="pb-2 text-center">الكمية</th>
-                  <th className="pb-2 text-left">الإجمالي</th>
-                  <th className="pb-2"></th>
+                <tr className="text-xs text-slate-400 border-b font-bold">
+                  <th className="pb-3 pr-2">كود</th>
+                  <th className="pb-3">اسم الصنف</th>
+                  <th className="pb-3 text-center">سعر الوحدة</th>
+                  <th className="pb-3 text-center">الكمية</th>
+                  <th className="pb-3 text-left">الإجمالي</th>
+                  <th className="pb-3 w-12"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y divide-slate-50">
                 {currentCart.map((item, idx) => (
-                  <tr key={idx} className="group">
-                    <td className="py-4 text-sm font-mono">{item.code}</td>
-                    <td className="py-4 font-bold">{item.name}</td>
+                  <tr key={idx} className="group hover:bg-slate-50 transition-colors">
+                    <td className="py-4 text-xs font-mono text-slate-400 pr-2">{item.code}</td>
+                    <td className="py-4 font-black text-slate-700">{item.name}</td>
                     <td className="py-4 text-center">{item.price.toFixed(2)}</td>
                     <td className="py-4 text-center">
                       <div className="flex items-center justify-center gap-2">
@@ -994,8 +1136,8 @@ function DailySalesSection({ settings, companies, sales, setSales, setCompanies 
                           updated[idx].quantity += 1;
                           updated[idx].subtotal = updated[idx].quantity * updated[idx].price;
                           setCurrentCart(updated);
-                        }} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-indigo-500 hover:text-white">+</button>
-                        <span className="w-8 text-center font-bold">{item.quantity}</span>
+                        }} className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all">+</button>
+                        <span className="w-8 text-center font-bold text-sm">{item.quantity}</span>
                         <button onClick={() => {
                           if (item.quantity > 1) {
                             const updated = [...currentCart];
@@ -1003,12 +1145,12 @@ function DailySalesSection({ settings, companies, sales, setSales, setCompanies 
                             updated[idx].subtotal = updated[idx].quantity * updated[idx].price;
                             setCurrentCart(updated);
                           }
-                        }} className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-500 hover:text-white">-</button>
+                        }} className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all">-</button>
                       </div>
                     </td>
                     <td className="py-4 text-left font-black text-indigo-600">{item.subtotal.toFixed(2)}</td>
                     <td className="py-4 text-left">
-                      <button onClick={() => setCurrentCart(currentCart.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 p-2"><Trash2 size={18}/></button>
+                      <button onClick={() => setCurrentCart(currentCart.filter((_, i) => i !== idx))} className="text-red-300 hover:text-red-500 p-2 transition-colors"><Trash2 size={18}/></button>
                     </td>
                   </tr>
                 ))}
@@ -1016,50 +1158,80 @@ function DailySalesSection({ settings, companies, sales, setSales, setCompanies 
             </table>
             {currentCart.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center py-20 text-slate-300">
-                <ShoppingCart size={48} className="opacity-20 mb-4" />
-                <p>السلة فارغة</p>
+                <ShoppingCart size={80} className="opacity-10 mb-6" />
+                <p className="text-xl font-medium">ابدأ بمسح الأكواد لإضافتها للفاتورة</p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="w-full lg:w-96 space-y-6">
-        <div className="bg-indigo-900 text-white p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-          <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-3xl"></div>
-          <div className="relative z-10">
-            <p className="text-indigo-300 text-sm font-bold uppercase tracking-widest mb-2">الإجمالي المطلوب</p>
-            <h3 className="text-5xl font-black mb-10">{total.toFixed(2)} <span className="text-xl">ج.م</span></h3>
+      <div className="w-full lg:w-[400px] space-y-6">
+        <div className="bg-indigo-900 text-white p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col border border-white/10">
+          <div className="absolute -top-20 -right-20 w-64 h-64 bg-indigo-500/20 rounded-full blur-[100px]"></div>
+          <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-purple-500/20 rounded-full blur-[100px]"></div>
+          
+          <div className="relative z-10 flex flex-col h-full">
+            <div className="mb-10 text-center">
+              <p className="text-indigo-300 text-[10px] font-black uppercase tracking-[0.2em] mb-3">Total Amount | الإجمالي النهائي</p>
+              <h3 className="text-6xl font-black mb-2 flex items-center justify-center gap-3">
+                {total.toFixed(2)} 
+                <span className="text-xl opacity-50">ج.م</span>
+              </h3>
+            </div>
             
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-indigo-300 block mb-1">المبلغ المستلم من العميل</label>
+            <div className="space-y-6 flex-1">
+              <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
+                <label className="text-[10px] text-indigo-200 block mb-2 font-bold pr-1">المبلغ المستلم من العميل (Received)</label>
                 <input 
                   type="number" 
-                  className="w-full bg-white/10 border border-white/20 rounded-2xl px-6 py-3 text-2xl font-black outline-none focus:bg-white/20 transition-all"
+                  className="w-full bg-white/10 border-none rounded-2xl px-6 py-4 text-3xl font-black outline-none focus:bg-white/20 transition-all text-white placeholder-white/20"
                   value={received || ''}
                   onChange={(e) => setReceived(parseFloat(e.target.value))}
+                  placeholder="0.00"
                 />
               </div>
-              <div className="flex justify-between items-center p-4 bg-white/5 rounded-2xl">
-                <span className="text-sm font-bold opacity-70">المتبقي للعميل</span>
-                <span className="text-2xl font-black text-green-400">{change.toFixed(2)} ج.م</span>
+              
+              <div className="flex justify-between items-center p-6 bg-white/10 rounded-3xl border border-white/5 backdrop-blur-md">
+                <div className="text-right">
+                  <p className="text-[10px] text-indigo-300 font-bold mb-1 uppercase">Change | المتبقي</p>
+                  <p className="text-3xl font-black text-green-400 tracking-tight">{change.toFixed(2)} <span className="text-xs">ج.م</span></p>
+                </div>
+                <div className="w-12 h-12 bg-green-400/20 rounded-2xl flex items-center justify-center text-green-400">
+                  <AlertCircle size={28}/>
+                </div>
               </div>
             </div>
 
-            <div className="mt-8 flex gap-2">
-              <button onClick={handleSaveSale} className="flex-1 bg-white text-indigo-900 py-4 rounded-2xl font-black text-lg hover:scale-[1.02] active:scale-95 transition-all shadow-xl">حفظ</button>
-              <button onClick={() => window.print()} className="bg-white/10 p-4 rounded-2xl hover:bg-white/20 transition-all border border-white/10"><Printer size={24}/></button>
+            <div className="mt-12 flex gap-3">
+              <button 
+                onClick={handleSaveSale} 
+                className="flex-1 bg-white text-indigo-900 py-5 rounded-3xl font-black text-xl hover:scale-[1.03] active:scale-95 transition-all shadow-xl hover:shadow-indigo-500/30"
+              >
+                إنهاء وحفظ الفاتورة
+              </button>
+              <button onClick={() => window.print()} className="bg-white/10 p-5 rounded-3xl hover:bg-white/20 transition-all border border-white/10 text-white flex items-center justify-center">
+                <Printer size={32}/>
+              </button>
             </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-          <h4 className="font-bold mb-4 flex items-center gap-2"><AlertCircle size={18} className="text-orange-500"/> ملاحظات سريعة</h4>
-          <ul className="text-sm text-slate-500 space-y-2">
-            <li>• يتم إضافة نسبة ربح {settings.profitMargin}% تلقائياً.</li>
-            <li>• تأكد من مسح باركود المنتج بشكل صحيح.</li>
-            <li>• يمكن تعديل الكميات أو حذف الأصناف قبل الحفظ.</li>
+        <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+          <h4 className="font-black mb-6 text-slate-800 flex items-center gap-2"><AlertCircle size={20} className="text-orange-500"/> تذكير سياسة البيع</h4>
+          <ul className="text-sm text-slate-500 space-y-4">
+            <li className="flex gap-3 items-start">
+              <div className="w-5 h-5 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 shrink-0 mt-0.5">•</div>
+              <span>يتم احتساب ضريبة القيمة المضافة ونسبة الربح ({settings.profitMargin}%) آلياً.</span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <div className="w-5 h-5 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 shrink-0 mt-0.5">•</div>
+              <span>راجع الكميات المتبقية في المخزن قبل تأكيد الأوردرات الكبيرة.</span>
+            </li>
+            <li className="flex gap-3 items-start">
+              <div className="w-5 h-5 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 shrink-0 mt-0.5">•</div>
+              <span>في حال الارتجاع، استخدم زر الحذف المتاح بجانب كل صنف.</span>
+            </li>
           </ul>
         </div>
       </div>
@@ -1073,90 +1245,92 @@ function SalesReportsSection({ sales, companies }: { sales: Sale[], companies: C
   const [period, setPeriod] = useState('all');
 
   const filteredSales = sales.filter(s => {
-    // Basic search simulation
     return s.id.toString().includes(search);
   });
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <h2 className="text-2xl font-black flex items-center gap-2"><BarChart className="text-indigo-600"/> تقارير المبيعات</h2>
+        <h2 className="text-2xl font-black flex items-center gap-2"><BarChart className="text-indigo-600"/> تقارير حركة المبيعات</h2>
         <div className="flex gap-2 w-full md:w-auto">
-          <input 
-            type="text" 
-            placeholder="بحث برقم العملية..." 
-            className="px-4 py-2 border rounded-xl flex-1"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select className="px-4 py-2 border rounded-xl bg-white" value={period} onChange={(e) => setPeriod(e.target.value)}>
-            <option value="all">كل الفترات</option>
-            <option value="today">اليوم</option>
-            <option value="month">هذا الشهر</option>
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+            <input 
+              type="text" 
+              placeholder="رقم الفاتورة..." 
+              className="w-full pr-10 pl-4 py-2 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <select className="px-4 py-2 border rounded-xl bg-white outline-none" value={period} onChange={(e) => setPeriod(e.target.value)}>
+            <option value="all">كل السجلات</option>
+            <option value="today">اليوم فقط</option>
+            <option value="month">إجمالي الشهر</option>
           </select>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center"><ShoppingCart/></div>
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-6 transition-all hover:shadow-md">
+          <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shrink-0"><ShoppingCart size={32}/></div>
           <div>
-            <p className="text-xs text-slate-400 font-bold uppercase">إجمالي المبيعات</p>
-            <p className="text-2xl font-black">{sales.reduce((a, b) => a + b.total, 0).toFixed(2)} ج.م</p>
+            <p className="text-xs text-slate-400 font-black uppercase mb-1 tracking-wider">إجمالي المبيعات</p>
+            <p className="text-3xl font-black">{sales.reduce((a, b) => a + b.total, 0).toFixed(2)} <span className="text-xs font-normal opacity-50">ج.م</span></p>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center"><CheckCircle/></div>
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-6 transition-all hover:shadow-md">
+          <div className="w-16 h-16 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center shrink-0"><CheckCircle size={32}/></div>
           <div>
-            <p className="text-xs text-slate-400 font-bold uppercase">عدد العمليات</p>
-            <p className="text-2xl font-black">{sales.length}</p>
+            <p className="text-xs text-slate-400 font-black uppercase mb-1 tracking-wider">العمليات الناجحة</p>
+            <p className="text-3xl font-black">{sales.length} <span className="text-xs font-normal opacity-50">فاتورة</span></p>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center"><Box/></div>
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex items-center gap-6 transition-all hover:shadow-md">
+          <div className="w-16 h-16 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center shrink-0"><Box size={32}/></div>
           <div>
-            <p className="text-xs text-slate-400 font-bold uppercase">الأصناف المباعة</p>
-            <p className="text-2xl font-black">{sales.reduce((a, b) => a + b.items.length, 0)}</p>
+            <p className="text-xs text-slate-400 font-black uppercase mb-1 tracking-wider">وحدات مباعة</p>
+            <p className="text-3xl font-black">{sales.reduce((a, b) => a + b.items.reduce((acc, curr) => acc + curr.quantity, 0), 0)} <span className="text-xs font-normal opacity-50">قطعة</span></p>
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-sm border overflow-hidden animate-in fade-in slide-in-from-bottom-6 duration-700">
         <table className="w-full text-right">
-          <thead className="bg-slate-50 text-slate-400 text-sm">
+          <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black">
             <tr>
-              <th className="p-4 font-medium">الرقم</th>
-              <th className="p-4 font-medium">الوقت والتاريخ</th>
-              <th className="p-4 font-medium">الأصناف</th>
-              <th className="p-4 font-medium">الإجمالي</th>
-              <th className="p-4 font-medium">المستلم</th>
-              <th className="p-4 font-medium">المتبقي</th>
+              <th className="p-5">رقم العملية</th>
+              <th className="p-5">توقيت البيع</th>
+              <th className="p-5">تفاصيل الأصناف</th>
+              <th className="p-5 text-center">إجمالي القيمة</th>
+              <th className="p-5 text-center">المبلغ المدفوع</th>
+              <th className="p-5 text-left">الفكة (Change)</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-slate-50">
             {filteredSales.map(sale => (
-              <tr key={sale.id} className="hover:bg-slate-50">
-                <td className="p-4 font-mono text-xs">#{sale.id}</td>
-                <td className="p-4 font-medium">{new Date(sale.date).toLocaleString('ar-EG')}</td>
-                <td className="p-4">
-                  <div className="flex flex-wrap gap-1">
-                    {sale.items.slice(0, 2).map((it, i) => (
-                      <span key={i} className="px-2 py-0.5 bg-slate-100 rounded-md text-[10px]">{it.name}</span>
+              <tr key={sale.id} className="hover:bg-slate-50/50 transition-colors">
+                <td className="p-5 font-mono text-xs text-slate-400">#{sale.id}</td>
+                <td className="p-5 font-bold text-slate-700">{new Date(sale.date).toLocaleString('ar-EG', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</td>
+                <td className="p-5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {sale.items.slice(0, 3).map((it, i) => (
+                      <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md text-[10px] font-bold border border-indigo-100">{it.name}</span>
                     ))}
-                    {sale.items.length > 2 && <span className="text-[10px] text-slate-400">+{sale.items.length - 2} أخرى</span>}
+                    {sale.items.length > 3 && <span className="text-[10px] text-slate-400 font-bold">+{sale.items.length - 3} أصناف أخرى</span>}
                   </div>
                 </td>
-                <td className="p-4 font-bold text-indigo-600">{sale.total.toFixed(2)}</td>
-                <td className="p-4">{sale.receivedAmount.toFixed(2)}</td>
-                <td className="p-4 text-green-600 font-bold">{sale.changeAmount.toFixed(2)}</td>
+                <td className="p-5 text-center font-black text-indigo-600">{sale.total.toFixed(2)}</td>
+                <td className="p-5 text-center font-medium">{sale.receivedAmount.toFixed(2)}</td>
+                <td className="p-5 text-left text-green-600 font-black">{sale.changeAmount.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
         </table>
         {filteredSales.length === 0 && (
-          <div className="p-20 text-center text-slate-300">
-            <BarChart size={48} className="mx-auto mb-4 opacity-20"/>
-            <p>لا توجد بيانات مبيعات لعرضها</p>
+          <div className="p-32 text-center text-slate-300">
+            <BarChart size={80} className="mx-auto mb-6 opacity-10"/>
+            <p className="text-xl">لا توجد سجلات مبيعات للفترة المختارة</p>
           </div>
         )}
       </div>
@@ -1183,6 +1357,7 @@ function SettingsSection({ settings, setSettings, users, setUsers }: { settings:
     };
     setUsers([...users, u]);
     setNewUser({ role: Role.EMPLOYEE, permissions: [] });
+    alert('تم إنشاء حساب الموظف الجديد');
   };
 
   const handleUpdateSidebarName = (key: string, val: string) => {
@@ -1191,89 +1366,122 @@ function SettingsSection({ settings, setSettings, users, setUsers }: { settings:
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-black flex items-center gap-2"><SettingsIcon className="text-indigo-600"/> إعدادات النظام</h2>
+      <h2 className="text-2xl font-black flex items-center gap-2"><SettingsIcon className="text-indigo-600"/> لوحة التحكم والإعدادات</h2>
       
-      <div className="flex flex-col md:flex-row gap-6">
-        <div className="w-full md:w-64 space-y-2">
-          <button onClick={() => setActiveTab('general')} className={`w-full text-right px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'general' ? 'bg-indigo-600 text-white' : 'bg-white hover:bg-slate-100'}`}>الإعدادات العامة</button>
-          <button onClick={() => setActiveTab('users')} className={`w-full text-right px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'users' ? 'bg-indigo-600 text-white' : 'bg-white hover:bg-slate-100'}`}>المستخدمين والصلاحيات</button>
-          <button onClick={() => setActiveTab('labels')} className={`w-full text-right px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'labels' ? 'bg-indigo-600 text-white' : 'bg-white hover:bg-slate-100'}`}>تسمية القوائم</button>
+      <div className="flex flex-col md:flex-row gap-8">
+        <div className="w-full md:w-72 space-y-3 shrink-0">
+          <button onClick={() => setActiveTab('general')} className={`w-full text-right px-6 py-4 rounded-2xl font-black transition-all shadow-sm ${activeTab === 'general' ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white hover:bg-slate-100 text-slate-600'}`}>الإعدادات الأساسية</button>
+          <button onClick={() => setActiveTab('users')} className={`w-full text-right px-6 py-4 rounded-2xl font-black transition-all shadow-sm ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white hover:bg-slate-100 text-slate-600'}`}>المستخدمين والصلاحيات</button>
+          <button onClick={() => setActiveTab('labels')} className={`w-full text-right px-6 py-4 rounded-2xl font-black transition-all shadow-sm ${activeTab === 'labels' ? 'bg-indigo-600 text-white shadow-indigo-200' : 'bg-white hover:bg-slate-100 text-slate-600'}`}>تسمية القوائم والواجهة</button>
         </div>
 
-        <div className="flex-1 bg-white p-8 rounded-3xl border shadow-sm">
+        <div className="flex-1 bg-white p-10 rounded-[2.5rem] border shadow-xl animate-in fade-in slide-in-from-left-6 duration-500">
           {activeTab === 'general' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-left-2 duration-300">
-              <div>
-                <label className="block text-sm font-black mb-2">اسم البرنامج</label>
+            <div className="space-y-10">
+              <div className="max-w-md">
+                <label className="block text-xs font-black text-slate-400 mb-3 uppercase tracking-widest">اسم البرنامج (App Name)</label>
                 <input 
                   type="text" 
                   value={settings.appName} 
                   onChange={(e) => setSettings({...settings, appName: e.target.value})}
-                  className="w-full max-w-md px-4 py-3 border rounded-2xl text-lg font-bold"
+                  className="w-full px-5 py-4 border rounded-2xl text-xl font-black outline-none focus:ring-4 focus:ring-indigo-50 transition-all"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-black mb-2">نسبة الربح الافتراضية (%)</label>
-                <input 
-                  type="number" 
-                  value={settings.profitMargin} 
-                  onChange={(e) => setSettings({...settings, profitMargin: parseFloat(e.target.value)})}
-                  className="w-full max-w-md px-4 py-3 border rounded-2xl text-lg font-bold"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <label className="block text-xs font-black text-slate-400 mb-3 uppercase tracking-widest">نسبة الربح الافتراضية (%)</label>
+                  <input 
+                    type="number" 
+                    value={settings.profitMargin} 
+                    onChange={(e) => setSettings({...settings, profitMargin: parseFloat(e.target.value)})}
+                    className="w-full px-5 py-4 border rounded-2xl text-xl font-black outline-none focus:ring-4 focus:ring-indigo-50 transition-all"
+                  />
+                  <p className="mt-2 text-xs text-slate-400">تُضاف آلياً على سعر توريد الصنف عند البيع.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-slate-400 mb-3 uppercase tracking-widest">حد تنبيه المخزون (Low Stock)</label>
+                  <input 
+                    type="number" 
+                    value={settings.lowStockThreshold} 
+                    onChange={(e) => setSettings({...settings, lowStockThreshold: parseInt(e.target.value)})}
+                    className="w-full px-5 py-4 border rounded-2xl text-xl font-black outline-none focus:ring-4 focus:ring-indigo-50 transition-all"
+                  />
+                  <p className="mt-2 text-xs text-slate-400">سيظهر تنبيه عند الجرس إذا وصلت الكمية لهذا الرقم أو أقل.</p>
+                </div>
               </div>
             </div>
           )}
 
           {activeTab === 'users' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-left-2 duration-300">
-              <div className="bg-slate-50 p-6 rounded-3xl space-y-4">
-                <h4 className="font-black text-indigo-600">إضافة حساب جديد</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <input type="text" placeholder="اسم المستخدم" className="px-4 py-2 border rounded-xl" value={newUser.username || ''} onChange={(e) => setNewUser({...newUser, username: e.target.value})} />
-                  <input type="password" placeholder="كلمة المرور" className="px-4 py-2 border rounded-xl" value={newUser.password || ''} onChange={(e) => setNewUser({...newUser, password: e.target.value})} />
-                  <select className="px-4 py-2 border rounded-xl bg-white" value={newUser.role} onChange={(e) => setNewUser({...newUser, role: e.target.value as Role})}>
-                    <option value={Role.EMPLOYEE}>{Role.EMPLOYEE}</option>
-                    <option value={Role.ADMIN}>{Role.ADMIN}</option>
-                  </select>
+            <div className="space-y-10">
+              <div className="bg-indigo-50/50 p-8 rounded-[2rem] border border-indigo-100">
+                <h4 className="font-black text-indigo-700 mb-6 flex items-center gap-2">إضافة مستخدم جديد للنظام</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-indigo-400 pr-1 uppercase">Username | الاسم</label>
+                    <input type="text" className="w-full px-5 py-3 border border-indigo-200 rounded-2xl outline-none focus:bg-white" value={newUser.username || ''} onChange={(e) => setNewUser({...newUser, username: e.target.value})} placeholder="admin_user" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-indigo-400 pr-1 uppercase">Password | كلمة المرور</label>
+                    <input type="password" className="w-full px-5 py-3 border border-indigo-200 rounded-2xl outline-none focus:bg-white" value={newUser.password || ''} onChange={(e) => setNewUser({...newUser, password: e.target.value})} placeholder="••••••••" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-indigo-400 pr-1 uppercase">Role | الوظيفة</label>
+                    <select className="w-full px-5 py-3 border border-indigo-200 rounded-2xl bg-white outline-none" value={newUser.role} onChange={(e) => setNewUser({...newUser, role: e.target.value as Role})}>
+                      <option value={Role.EMPLOYEE}>موظف كاشير (Employee)</option>
+                      <option value={Role.ADMIN}>مدير نظام (Admin)</option>
+                    </select>
+                  </div>
                 </div>
-                <button onClick={handleAddUser} className="bg-indigo-600 text-white px-8 py-2 rounded-xl font-bold hover:bg-indigo-700">إنشاء الحساب</button>
+                <button onClick={handleAddUser} className="bg-indigo-600 text-white px-10 py-3 rounded-2xl font-black shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">تفعيل الحساب فوراً</button>
               </div>
 
-              <div className="divide-y">
-                {users.map(u => (
-                  <div key={u.id} className="py-4 flex justify-between items-center group">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center font-black text-indigo-600">{u.username[0].toUpperCase()}</div>
-                      <div>
-                        <p className="font-bold">{u.username}</p>
-                        <p className="text-xs text-slate-400">{u.role} - انضم في {new Date(u.startDate).toLocaleDateString()}</p>
+              <div>
+                <h4 className="font-black text-slate-800 mb-6 border-b pb-4">المستخدمين الحاليين</h4>
+                <div className="space-y-4">
+                  {users.map(u => (
+                    <div key={u.id} className="p-5 bg-slate-50 border rounded-2xl flex justify-between items-center group hover:bg-white hover:shadow-md transition-all">
+                      <div className="flex items-center gap-5">
+                        <div className="w-12 h-12 bg-white text-indigo-600 border rounded-2xl flex items-center justify-center font-black text-xl shadow-sm">{u.username[0].toUpperCase()}</div>
+                        <div>
+                          <p className="font-black text-slate-800">{u.username}</p>
+                          <div className="flex gap-4 mt-1">
+                            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{u.role}</span>
+                            <span className="text-[10px] text-slate-400">عضو منذ: {new Date(u.startDate).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button className="p-3 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors"><Edit size={20}/></button>
+                        {u.username !== 'admin' && (
+                          <button onClick={() => setUsers(users.filter(x => x.id !== u.id))} className="p-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={20}/></button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                      <button className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"><Edit size={18}/></button>
-                      {u.username !== 'admin' && (
-                        <button onClick={() => setUsers(users.filter(x => x.id !== u.id))} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
           {activeTab === 'labels' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-left-2 duration-300">
-              {Object.entries(settings.sidebarNames).map(([key, value]) => (
-                <div key={key} className="flex flex-col md:flex-row items-center gap-4 border-b pb-4 last:border-0">
-                  <label className="w-full md:w-48 text-sm font-bold text-slate-500">{key}</label>
-                  <input 
-                    type="text" 
-                    value={value} 
-                    onChange={(e) => handleUpdateSidebarName(key, e.target.value)}
-                    className="flex-1 w-full px-4 py-2 border rounded-xl"
-                  />
-                </div>
-              ))}
+            <div className="space-y-8">
+              <div className="bg-slate-50 p-6 rounded-2xl border mb-8">
+                <p className="text-sm font-bold text-slate-600 leading-relaxed">يمكنك تخصيص أسماء القوائم الجانبية لتتناسب مع احتياجات متجرك الخاصة. التعديلات ستظهر فوراً في القائمة.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {Object.entries(settings.sidebarNames).map(([key, value]) => (
+                  <div key={key} className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter pr-1">{key}</label>
+                    <input 
+                      type="text" 
+                      value={value} 
+                      onChange={(e) => handleUpdateSidebarName(key, e.target.value)}
+                      className="w-full px-5 py-3 border rounded-xl font-bold outline-none focus:border-indigo-500 transition-all"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
