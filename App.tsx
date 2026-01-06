@@ -22,7 +22,9 @@ import {
   FileSpreadsheet,
   CheckCircle,
   AlertCircle,
-  ChevronDown
+  ChevronDown,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { 
   User, 
@@ -67,12 +69,24 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('dailySales');
   const [showLoginWelcome, setShowLoginWelcome] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [time, setTime] = useState(new Date());
 
-  // Clock Update
+  // Clock Update & Connectivity Monitor
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   // Compute Low Stock Items
@@ -141,10 +155,19 @@ export default function App() {
           <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-black/10 rounded-lg transition-colors">
             <Menu size={24} />
           </button>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-black">{settings.appName}</h1>
-            <div className="h-4 w-px bg-current opacity-20 mx-2"></div>
-            <span className="text-sm font-medium hidden md:block">{currentUser.username}</span>
+          <div className="flex flex-col md:flex-row md:items-center md:gap-2">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-black">{settings.appName}</h1>
+              {/* Connection Status Indicator */}
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/5 border border-current/10 ml-2">
+                <div className={`w-2 h-2 rounded-full shadow-sm ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+                <span className="text-[10px] font-bold opacity-80">{isOnline ? 'متصل' : 'أوفلاين'}</span>
+              </div>
+            </div>
+            <div className="hidden md:flex items-center">
+              <div className="h-4 w-px bg-current opacity-20 mx-2"></div>
+              <span className="text-sm font-medium">{currentUser.username}</span>
+            </div>
           </div>
         </div>
 
